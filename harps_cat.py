@@ -66,6 +66,12 @@ if __name__ == "__main__":
     Dec_sign = [copysign(1.0,i) for i in spocs_pos['DEd']]  # this works with -0h objects too
     spocs_Dec = Dec_sign * (np.abs(spocs_pos['DEd'])+spocs_pos['DEm']/60.0+spocs_pos['DEs']/3600.0)
     
+    pastel = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/PASTEL/pastel.csv', delimiter=',', usecols=(1,2,3,4,5,6,18,20,22), \
+             dtype={'names': ('RAh', 'RAm', 'RAs', 'DEd', 'DEm', 'DEs', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8', '<f8', '<f8', '<f8', '<f8')})
+    pastel_RA = (pastel['RAh']+pastel['RAm']/60.0+pastel['RAs']/3600.0)/24.0*360.0 
+    Dec_sign = [copysign(1.0,i) for i in pastel['DEd']]  # this works with -0h objects too
+    pastel_Dec = Dec_sign * (np.abs(pastel['DEd'])+pastel['DEm']/60.0+pastel['DEs']/3600.0)
+    
     sousa = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/HARPS_GTO/Sousa2008.tsv', delimiter='|', skip_header=72, \
                 usecols=(0,1,3,5,7), dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
 
@@ -74,7 +80,9 @@ if __name__ == "__main__":
     
     gaia = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/Gaia/gaia_eso.csv', delimiter=',', skip_header=1, \
                 usecols=(5,6,9,11,13), dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
-        
+       
+    galah = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/GALAH/catalog.dat', usecols=(3,4,5,6,7), \
+                dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
 
     # READ IN THE HARPS CATALOG:
     HARPScat = Catalog()
@@ -88,12 +96,19 @@ if __name__ == "__main__":
     ambre_count = 0
     spocs_count = 0
     sousa_count = 0
+    galah_count = 0
+    pastel_count = 0
     for i,(ra,dec) in enumerate(zip(HARPScat.ra, HARPScat.dec)):
         # find Gaia-ESO match:
         gaia_ind = (np.sqrt(((ra - gaia['RA'])/np.cos(dec * np.pi/180.0))**2 + (dec - gaia['Dec'])**2)).argmin()
         if is_close(ra, gaia['RA'][gaia_ind], dec, gaia['Dec'][gaia_ind]):
             HARPScat.add_param(i, gaia[gaia_ind]) 
             gaia_count += 1
+        # find PASTEL match:
+        pastel_ind = (np.sqrt(((ra - pastel_RA)/np.cos(dec * np.pi/180.0))**2 + (dec - pastel_Dec)**2)).argmin()
+        if is_close(ra, pastel_RA[pastel_ind], dec, pastel_Dec[pastel_ind]):
+            HARPScat.add_param(i, pastel[pastel_ind])
+            pastel_count += 1
         # find AMBRE match:
         ambre_ind = (np.sqrt(((ra - ambre['RA'])/np.cos(dec * np.pi/180.0))**2 + (dec - ambre['Dec'])**2)).argmin()
         if is_close(ra, ambre['RA'][ambre_ind], dec, ambre['Dec'][ambre_ind]):
@@ -109,11 +124,19 @@ if __name__ == "__main__":
         if is_close(ra, sousa['RA'][sousa_ind], dec, sousa['Dec'][sousa_ind]):
             HARPScat.add_param(i, sousa[sousa_ind])
             sousa_count += 1
+        # find GALAH match:
+        galah_ind = (np.sqrt(((ra - galah['RA'])/np.cos(dec * np.pi/180.0))**2 + (dec - galah['Dec'])**2)).argmin()
+        if is_close(ra, galah['RA'][galah_ind], dec, galah['Dec'][galah_ind]):
+            HARPScat.add_param(i, galah[galah_ind])
+            galah_count += 1
     
-    print "+ Gaia-ESO: {0} objects found".format(gaia_count)   
+    print "+ Gaia-ESO: {0} objects found".format(gaia_count) 
+    print "+ PASTEL: {0} objects found".format(pastel_count)         
     print "+ AMBRE: {0} objects found".format(ambre_count)   
     print "+ SPOCS: {0} objects found".format(spocs_count)       
     print "+ Sousa: {0} objects found".format(sousa_count) 
+    print "+ GALAH: {0} objects found".format(galah_count) 
+    
     
     print "net unique objects found: {0}".format(np.sum(HARPScat.logg > 0.0))      
             
