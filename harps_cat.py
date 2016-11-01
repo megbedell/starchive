@@ -1,7 +1,9 @@
 import numpy as np
 import csv
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from math import copysign
+import fitsio
 
 class Catalog:
     def __init__(self):
@@ -42,6 +44,11 @@ class Catalog:
         self.teff[ind] = param['teff']
         self.logg[ind] = param['logg']
         self.feh[ind] = param['feh']
+        
+    def add_col(self, col_name):
+        # add an empty column with name 'col_name'
+        new_col = np.zeros_like(self.ra)
+        setattr(self, col_name, new_col)
 
 def is_close(ra1, ra2, dec1, dec2, radius=1.0/120.0):
     # default radius: 30 arcsec (units degrees)
@@ -51,6 +58,10 @@ def is_close(ra1, ra2, dec1, dec2, radius=1.0/120.0):
         return True
     return False
 
+def abs_mag(rel_mag, plx):
+    # takes relative magnitude and parallax (unit mas); returns absolute magnitude
+    abs_mag = rel_mag + 5*(np.log10(plx/100.)+1.)
+    return abs_mag
 if __name__ == "__main__":
 
     #lamost = np.loadtxt('/Users/mbedell/Documents/Research/Stars/LAMOST/dr2_stellar.csv', delimiter='|', skiprows=1, \
@@ -72,8 +83,8 @@ if __name__ == "__main__":
     Dec_sign = [copysign(1.0,i) for i in pastel['DEd']]  # this works with -0h objects too
     pastel_Dec = Dec_sign * (np.abs(pastel['DEd'])+pastel['DEm']/60.0+pastel['DEs']/3600.0)
     
-    sousa = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/HARPS_GTO/Sousa2008.tsv', delimiter='|', skip_header=72, \
-                usecols=(0,1,3,5,7), dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
+    sousa = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/HARPS_GTO/Sousa2011.tsv', delimiter='|', \
+                usecols=(1,4,9,24,25), dtype={'names': ('teff', 'logg', 'feh', 'RA', 'Dec'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
 
     ambre = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/AMBRE/ambre_feros.csv', delimiter=',', skip_header=1, \
                 usecols=(3,4,17,20,23), dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
@@ -83,6 +94,11 @@ if __name__ == "__main__":
        
     galah = np.genfromtxt('/Users/mbedell/Documents/Research/Stars/GALAH/catalog.dat', usecols=(3,4,5,6,7), \
                 dtype={'names': ('RA', 'Dec', 'teff', 'logg', 'feh'), 'formats': ('<f8', '<f8', '<f8', '<f8', '<f8')})
+                
+    tgas_2mass = fitsio.read('/Users/mbedell/Documents/Research/Stars/Gaia/tgas-matched-2mass.fits')
+    tgas = fitsio.read('/Users/mbedell/Documents/Research/Stars/Gaia/tgas-source.fits')
+    tgas_apass = fitsio.read('/Users/mbedell/Documents/Research/Stars/Gaia/tgas-matched-apass-dr9.fits')
+    
 
     # READ IN THE HARPS CATALOG:
     HARPScat = Catalog()
@@ -126,7 +142,7 @@ if __name__ == "__main__":
             sousa_count += 1
         # find GALAH match:
         galah_ind = (np.sqrt(((ra - galah['RA'])/np.cos(dec * np.pi/180.0))**2 + (dec - galah['Dec'])**2)).argmin()
-        if is_close(ra, galah['RA'][galah_ind], dec, galah['Dec'][galah_ind]):
+        if is_close(ra, galah['RA'][galah_ind], dec, galah['Dec'][galah_ind], radius=1./60.):
             HARPScat.add_param(i, galah[galah_ind])
             galah_count += 1
     
@@ -138,23 +154,89 @@ if __name__ == "__main__":
     print "+ GALAH: {0} objects found".format(galah_count) 
     
     
-    print "net unique objects found: {0}".format(np.sum(HARPScat.logg > 0.0))      
+    print "net unique objects found: {0}".format(np.sum(HARPScat.logg > 0.0))   
+    
+    # POPULATE PHOTOMETRY + PARALLAX:
+    twomass_count = 0
+    apass_count = 0
+    HARPScat.add_col('plx')
+    HARPScat.add_col('plx_err')
+    HARPScat.add_col('kmag')
+    HARPScat.add_col('kerr')
+    HARPScat.add_col('bmag')
+    HARPScat.add_col('berr')
+    HARPScat.add_col('vmag')
+    HARPScat.add_col('verr')    
+    for i,(ra,dec) in enumerate(zip(HARPScat.ra, HARPScat.dec)):
+        tgas_ind = (np.sqrt(((ra - tgas_2mass['ra'])/np.cos(dec * np.pi/180.0))**2 + (dec - tgas_2mass['dec'])**2)).argmin()
+        if is_close(ra, tgas_2mass['ra'][tgas_ind], dec, tgas_2mass['dec'][tgas_ind]):
+            HARPScat.kmag[i] = tgas_2mass['k_mag'][tgas_ind]
+            HARPScat.plx[i] = tgas['parallax'][tgas_ind]
+            HARPScat.plx_err[i] = tgas['parallax_error'][tgas_ind]
+            twomass_count += 1
+            # estimate parameters if not already present:
+            #if HARPScat.teff[i] == 0:
+            #    abs_k = abs_mag(HARPScat.kmag[i], HARPScat.plx[i])
+        apass_ind = (np.sqrt(((ra - tgas_apass['ra'])/np.cos(dec * np.pi/180.0))**2 + (dec - tgas_apass['dec'])**2)).argmin()
+        if is_close(ra, tgas_apass['ra'][apass_ind], dec, tgas_apass['dec'][apass_ind]):
+            HARPScat.plx[i] = tgas['parallax'][apass_ind]
+            HARPScat.plx_err[i] = tgas['parallax_error'][apass_ind]
+            HARPScat.bmag[i] = tgas_apass['bmag'][apass_ind]
+            HARPScat.berr[i] = tgas_apass['e_bmag'][apass_ind]
+            HARPScat.vmag[i] = tgas_apass['vmag'][apass_ind]
+            HARPScat.verr[i] = tgas_apass['e_vmag'][apass_ind]
+            apass_count += 1
+            
+    print "TGAS-2MASS: {0} objects found".format(twomass_count)
+    print "TGAS-APASS: {0} objects found".format(apass_count)
+    
+
+            
             
     # write out the catalog with parameters:
     save_cat =  np.transpose(np.asarray([HARPScat.name, HARPScat.ra, HARPScat.dec, HARPScat.n_exp, HARPScat.snr, \
             HARPScat.teff, HARPScat.logg, HARPScat.feh]))
     np.savetxt('HARPScat_param.csv', save_cat, \
             delimiter=',', fmt='%s', header='Name, RA, Dec, N_exp, SNR, Teff, logg, [M/H]')
+            
+    save_cat =  np.transpose(np.asarray([HARPScat.name, HARPScat.ra, HARPScat.dec, HARPScat.n_exp, HARPScat.snr, \
+            HARPScat.plx, HARPScat.plx_err, HARPScat.kmag, HARPScat.kerr, HARPScat.bmag, HARPScat.berr, HARPScat.vmag, HARPScat.verr]))
+    np.savetxt('HARPScat_tgas.csv', save_cat, \
+            delimiter=',', fmt='%s', header='Name, RA, Dec, N_exp, SNR, parallax, parallax_error, Kmag, Kmag_err, Bmag, Bmag_err, Vmag, Vmag_err')    
 
     # make an H-R diagram:
     t_data = np.float64(HARPScat.teff[HARPScat.logg > 0.0])
     g_data = np.float64(HARPScat.logg[HARPScat.logg > 0.0])
-    plt.hist2d(t_data, g_data, bins=[np.arange(4600, 6700, 100),np.arange(3.2,5.2, 0.1)], cmap=plt.get_cmap('BuGn'))
-    plt.xlim([6600,4600])
-    plt.ylim([5.1,3.2])
+    plt.hist2d(t_data, g_data, bins=[np.arange(4000, 7000, 100),np.arange(3.0,5.5, 0.1)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
+    plt.xlim([6900,4300])
+    plt.ylim([5.1,3.6])
     cbar = plt.colorbar()
     cbar.set_label('# of stars', rotation=90)
     plt.ylabel('log(g)')
     plt.xlabel(r'T$_{eff}$')
     plt.savefig('harps_hr.png')
-        
+    plt.clf()
+    
+    # make a color-magnitude diagram:
+    good = (HARPScat.vmag > 0.0) & np.isfinite(HARPScat.vmag) & np.isfinite(HARPScat.bmag) & (HARPScat.plx > 0.0)
+    bv = np.float64(HARPScat.bmag[good]) - np.float64(HARPScat.vmag[good])
+    abs_v = abs_mag(HARPScat.vmag[good], HARPScat.plx[good])
+    plt.hist2d(bv,abs_v, bins=[np.arange(-0.5, 2.0, 0.2),np.arange(-5,20, 2)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
+    plt.xlim([-0.6,2.1])
+    plt.ylim([18,-3])
+    cbar = plt.colorbar()
+    cbar.set_label('# of stars', rotation=90)
+    plt.ylabel('abs. V')
+    plt.xlabel('(B-V)')
+    plt.savefig('harps_cmag.png')
+    plt.clf()
+    
+    plt.hist2d(bv,abs_v, bins=[np.arange(-0.5, 2.0, 0.1),np.arange(-5,20, 1)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
+    plt.xlim([-0.5,2.0])
+    plt.ylim([18,-1])
+    cbar = plt.colorbar()
+    cbar.set_label('# of stars', rotation=90)
+    plt.ylabel('abs. V')
+    plt.xlabel('(B-V)')
+    plt.savefig('harps_cmag_smallbins.png')
+    plt.clf()
