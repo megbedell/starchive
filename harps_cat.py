@@ -60,7 +60,7 @@ def is_close(ra1, ra2, dec1, dec2, radius=1.0/120.0):
 
 def abs_mag(rel_mag, plx):
     # takes relative magnitude and parallax (unit mas); returns absolute magnitude
-    abs_mag = rel_mag + 5*(np.log10(plx/100.)+1.)
+    abs_mag = rel_mag + 5.0*(np.log10(plx/1000.)+1.)
     return abs_mag
 if __name__ == "__main__":
 
@@ -223,20 +223,49 @@ if __name__ == "__main__":
     abs_v = abs_mag(HARPScat.vmag[good], HARPScat.plx[good])
     plt.hist2d(bv,abs_v, bins=[np.arange(-0.5, 2.0, 0.2),np.arange(-5,20, 2)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
     plt.xlim([-0.6,2.1])
-    plt.ylim([18,-3])
+    plt.ylim([13,-6])
     cbar = plt.colorbar()
     cbar.set_label('# of stars', rotation=90)
-    plt.ylabel('abs. V')
+    plt.ylabel('$M_{V}$')
     plt.xlabel('(B-V)')
-    plt.savefig('harps_cmag.png')
+    plt.savefig('harps_cmag.pdf')
     plt.clf()
     
     plt.hist2d(bv,abs_v, bins=[np.arange(-0.5, 2.0, 0.1),np.arange(-5,20, 1)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
     plt.xlim([-0.5,2.0])
-    plt.ylim([18,-1])
+    plt.ylim([13,-6])
     cbar = plt.colorbar()
     cbar.set_label('# of stars', rotation=90)
     plt.ylabel('abs. V')
     plt.xlabel('(B-V)')
     plt.savefig('harps_cmag_smallbins.png')
     plt.clf()
+    
+    plt.scatter(bv,abs_v,c=HARPScat.snr[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.4, norm=LogNorm())
+    plt.xlim([-0.5,2.0])
+    plt.ylim([13,-6])
+    cbar = plt.colorbar()
+    cbar.set_label('SNR', rotation=90)
+    plt.scatter([],[],c='white',s=20,label='Nexp=20')
+    plt.scatter([],[],c='white',s=100,label='Nexp=100')
+    plt.scatter([],[],c='white',s=1000,label='Nexp=1000')
+    plt.legend(fontsize=14,ncol=3,scatterpoints=1,bbox_to_anchor=(0., 1.02, 1., .102), loc=3, mode="expand", borderaxespad=0.)
+    plt.ylabel('abs. V')
+    plt.xlabel('(B-V)')
+    plt.savefig('harps_cmag_snr.png')
+    plt.clf()
+    
+    plt.scatter(bv,abs_v,c=HARPScat.snr[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.4, norm=LogNorm())
+    plt.xlim([0.2,1.0])
+    plt.ylim([7,2])
+    cbar = plt.colorbar()
+    cbar.set_label('SNR', rotation=90)
+    plt.scatter([],[],c='white',s=20,label='Nexp=20')
+    plt.scatter([],[],c='white',s=100,label='Nexp=100')
+    plt.scatter([],[],c='white',s=1000,label='Nexp=1000')
+    plt.legend(fontsize=14,ncol=3,scatterpoints=1,bbox_to_anchor=(0., 1.02, 1., .102), loc=3, mode="expand", borderaxespad=0.)
+    plt.ylabel('abs. V')
+    plt.xlabel('(B-V)')
+    plt.savefig('harps_cmag_snr_zoom.png')
+    plt.clf()
+    
