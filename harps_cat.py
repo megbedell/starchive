@@ -1,9 +1,11 @@
 import numpy as np
+from tools import is_close, abs_mag
 import csv
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from math import copysign
 import fitsio
+import pickle
 
 class Catalog:
     def __init__(self):
@@ -49,21 +51,10 @@ class Catalog:
         # add an empty column with name 'col_name'
         new_col = np.zeros_like(self.ra)
         setattr(self, col_name, new_col)
-
-def is_close(ra1, ra2, dec1, dec2, radius=1.0/120.0):
-    # default radius: 30 arcsec (units degrees)
-    delra = np.abs(ra1 - ra2)
-    deldec = np.abs(dec1 - dec2)
-    if (deldec <= radius and delra <= radius/np.cos(dec1 * np.pi/180.0)):
-        return True
-    return False
-
-def abs_mag(rel_mag, plx):
-    # takes relative magnitude and parallax (unit mas); returns absolute magnitude
-    abs_mag = rel_mag + 5.0*(np.log10(plx/1000.)+1.)
-    return abs_mag
-if __name__ == "__main__":
-
+    
+def make(silent=False):
+    # generate a catalog of HARPS data
+    
     #lamost = np.loadtxt('/Users/mbedell/Documents/Research/Stars/LAMOST/dr2_stellar.csv', delimiter='|', skiprows=1, \
     #            usecols=(1,34,35,36,37,38,39,40,41), \
     #            dtype={'names': ('Designation', 'RA', 'Dec', 'teff', 'teff_err', 'logg', 'logg_err', 'feh', 'feh_err'), \
@@ -146,15 +137,15 @@ if __name__ == "__main__":
             HARPScat.add_param(i, galah[galah_ind])
             galah_count += 1
     
-    print "+ Gaia-ESO: {0} objects found".format(gaia_count) 
-    print "+ PASTEL: {0} objects found".format(pastel_count)         
-    print "+ AMBRE: {0} objects found".format(ambre_count)   
-    print "+ SPOCS: {0} objects found".format(spocs_count)       
-    print "+ Sousa: {0} objects found".format(sousa_count) 
-    print "+ GALAH: {0} objects found".format(galah_count) 
-    
-    
-    print "net unique objects found: {0}".format(np.sum(HARPScat.logg > 0.0))   
+    if not(silent):
+        print "+ Gaia-ESO: {0} objects found".format(gaia_count) 
+        print "+ PASTEL: {0} objects found".format(pastel_count)         
+        print "+ AMBRE: {0} objects found".format(ambre_count)   
+        print "+ SPOCS: {0} objects found".format(spocs_count)       
+        print "+ Sousa: {0} objects found".format(sousa_count) 
+        print "+ GALAH: {0} objects found".format(galah_count) 
+
+        print "net unique objects with spectral parameters found: {0}".format(np.sum(HARPScat.logg > 0.0))   
     
     # POPULATE PHOTOMETRY + PARALLAX:
     twomass_count = 0
@@ -186,23 +177,32 @@ if __name__ == "__main__":
             HARPScat.vmag[i] = tgas_apass['vmag'][apass_ind]
             HARPScat.verr[i] = tgas_apass['e_vmag'][apass_ind]
             apass_count += 1
-            
-    print "TGAS-2MASS: {0} objects found".format(twomass_count)
-    print "TGAS-APASS: {0} objects found".format(apass_count)
     
-
+    if not(silent):        
+        print "TGAS-2MASS: {0} objects found".format(twomass_count)
+        print "TGAS-APASS: {0} objects found".format(apass_count)
             
             
-    # write out the catalog with parameters:
+    # write out catalogs in csv format:
     save_cat =  np.transpose(np.asarray([HARPScat.name, HARPScat.ra, HARPScat.dec, HARPScat.n_exp, HARPScat.snr, \
             HARPScat.teff, HARPScat.logg, HARPScat.feh]))
-    np.savetxt('HARPScat_param.csv', save_cat, \
+    np.savetxt('data/HARPScat_param.csv', save_cat, \
             delimiter=',', fmt='%s', header='Name, RA, Dec, N_exp, SNR, Teff, logg, [M/H]')
             
     save_cat =  np.transpose(np.asarray([HARPScat.name, HARPScat.ra, HARPScat.dec, HARPScat.n_exp, HARPScat.snr, \
             HARPScat.plx, HARPScat.plx_err, HARPScat.kmag, HARPScat.kerr, HARPScat.bmag, HARPScat.berr, HARPScat.vmag, HARPScat.verr]))
-    np.savetxt('HARPScat_tgas.csv', save_cat, \
+    np.savetxt('data/HARPScat_tgas.csv', save_cat, \
             delimiter=',', fmt='%s', header='Name, RA, Dec, N_exp, SNR, parallax, parallax_error, Kmag, Kmag_err, Bmag, Bmag_err, Vmag, Vmag_err')    
+    
+    # dump catalog as pickle file:
+    pickle.dump(HARPScat,open('data/HARPScat.p', 'wb'))
+    
+    return HARPScat
+       
+if __name__ == "__main__":
+    
+    #HARPScat = make()
+    HARPScat = pickle.load(open('data/HARPScat.p','rb'))
 
     # make an H-R diagram:
     t_data = np.float64(HARPScat.teff[HARPScat.logg > 0.0])
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     cbar.set_label('# of stars', rotation=90)
     plt.ylabel('$M_{V}$')
     plt.xlabel('(B-V)')
-    plt.savefig('harps_cmag.pdf')
+    plt.savefig('fig/harps_cmag.pdf')
     plt.clf()
     
     plt.hist2d(bv,abs_v, bins=[np.arange(-0.5, 2.0, 0.1),np.arange(-5,20, 1)], cmap=plt.get_cmap('BuGn'), norm=LogNorm())
@@ -238,34 +238,34 @@ if __name__ == "__main__":
     cbar.set_label('# of stars', rotation=90)
     plt.ylabel('abs. V')
     plt.xlabel('(B-V)')
-    plt.savefig('harps_cmag_smallbins.png')
+    plt.savefig('fig/harps_cmag_smallbins.png')
     plt.clf()
     
-    plt.scatter(bv,abs_v,c=HARPScat.snr[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.4, norm=LogNorm())
+    plt.scatter(bv,abs_v,c=HARPScat.plx[good]/HARPScat.plx_err[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.5, norm=LogNorm())
     plt.xlim([-0.5,2.0])
     plt.ylim([13,-6])
     cbar = plt.colorbar()
-    cbar.set_label('SNR', rotation=90)
+    cbar.set_label(r'Gaia $\pi/ \sigma_{\pi}$', rotation=90)
     plt.scatter([],[],c='white',s=20,label='Nexp=20')
     plt.scatter([],[],c='white',s=100,label='Nexp=100')
     plt.scatter([],[],c='white',s=1000,label='Nexp=1000')
     plt.legend(fontsize=14,ncol=3,scatterpoints=1,bbox_to_anchor=(0., 1.02, 1., .102), loc=3, mode="expand", borderaxespad=0.)
     plt.ylabel('abs. V')
     plt.xlabel('(B-V)')
-    plt.savefig('harps_cmag_snr.png')
+    plt.savefig('fig/harps_cmag_snr2.png')
     plt.clf()
     
-    plt.scatter(bv,abs_v,c=HARPScat.snr[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.4, norm=LogNorm())
+    plt.scatter(bv,abs_v,c=HARPScat.plx[good]/HARPScat.plx_err[good],s=HARPScat.n_exp[good],cmap=plt.get_cmap('rainbow'),alpha=0.5, norm=LogNorm())
     plt.xlim([0.2,1.0])
     plt.ylim([7,2])
     cbar = plt.colorbar()
-    cbar.set_label('SNR', rotation=90)
+    cbar.set_label(r'Gaia $\pi/ \sigma_{\pi}$', rotation=90)
     plt.scatter([],[],c='white',s=20,label='Nexp=20')
     plt.scatter([],[],c='white',s=100,label='Nexp=100')
     plt.scatter([],[],c='white',s=1000,label='Nexp=1000')
     plt.legend(fontsize=14,ncol=3,scatterpoints=1,bbox_to_anchor=(0., 1.02, 1., .102), loc=3, mode="expand", borderaxespad=0.)
     plt.ylabel('abs. V')
     plt.xlabel('(B-V)')
-    plt.savefig('harps_cmag_snr_zoom.png')
+    plt.savefig('fig/harps_cmag_snr2_zoom.png')
     plt.clf()
     
